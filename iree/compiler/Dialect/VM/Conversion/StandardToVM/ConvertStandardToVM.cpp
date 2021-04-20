@@ -154,15 +154,15 @@ class ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
   }
 };
 
-class ConstantOpConversion : public OpConversionPattern<ConstantOp> {
-  using OpConversionPattern::OpConversionPattern;
+struct ConstantOpConversion : public OpConversionPattern<ConstantOp> {
+  ConstantOpConversion(MLIRContext *context, TypeConverter &typeConverter)
+      : OpConversionPattern(context), typeConverter(typeConverter) {}
+
+  TypeConverter &typeConverter;
 
   LogicalResult matchAndRewrite(
       ConstantOp srcOp, ArrayRef<Value> operands,
       ConversionPatternRewriter &rewriter) const override {
-    // TODO(#2878): use getTypeConverter() when we pass it upon creation.
-    IREE::VM::TypeConverter typeConverter(
-        IREE::VM::getTargetOptionsFromFlags());
     auto targetType = typeConverter.convertType(srcOp.getType());
     if (targetType.isa<IntegerType>()) {
       auto integerAttr = srcOp.getValue().dyn_cast<IntegerAttr>();
@@ -215,6 +215,8 @@ class ConstantOpConversion : public OpConversionPattern<ConstantOp> {
           return srcOp.emitRemark()
                  << "unsupported const floating-point bit width for dialect";
       }
+    } else {
+      return rewriter.notifyMatchFailure(srcOp, "unsupported type");
     }
     return success();
   }
@@ -627,15 +629,17 @@ class CallOpConversion : public OpConversionPattern<CallOp> {
 void populateStandardToVMPatterns(MLIRContext *context,
                                   TypeConverter &typeConverter,
                                   OwningRewritePatternList &patterns) {
-  patterns.insert<BranchOpConversion, CallOpConversion, CmpIOpConversion,
-                  CmpFOpConversion, CondBranchOpConversion, ModuleOpConversion,
-                  FuncOpConversion, ReturnOpConversion,
-                  CastingOpConversion<IndexCastOp>,
-                  CastingOpConversion<TruncateIOp>,
-                  CastingOpConversion<ZeroExtendIOp>, SelectOpConversion>(
-      typeConverter, context);
-  // TODO(#2878): pass typeConverter here.
-  patterns.insert<ConstantOpConversion>(context);
+  patterns.insert<
+      BranchOpConversion, CallOpConversion, CmpIOpConversion, CmpFOpConversion,
+      CondBranchOpConversion, ModuleOpConversion, FuncOpConversion,
+      ReturnOpConversion, CastingOpConversion<UnrealizedConversionCastOp>,
+      CastingOpConversion<IndexCastOp>, CastingOpConversion<TruncateIOp>,
+      CastingOpConversion<ZeroExtendIOp>, SelectOpConversion>(typeConverter,
+                                                              context);
+  // TODO(#2878): figure out how to pass the type converter in a supported way.
+  // Right now if we pass the type converter as the first argument - triggering
+  // the ConversionPattern stuff - it'll do weird things.
+  patterns.insert<ConstantOpConversion>(context, typeConverter);
 
   // Integer arithmetic ops.
   patterns.insert<

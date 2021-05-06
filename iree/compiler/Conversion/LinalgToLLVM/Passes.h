@@ -26,6 +26,10 @@ namespace iree_compiler {
 /// order.
 std::unique_ptr<FunctionPass> createPlanConvLoopOrderPass();
 
+/// Pad linalg ops workgroup tiles into the next integer multiple of the target
+/// vector size.
+std::unique_ptr<FunctionPass> createPadLinalgWorkgroupTilesPass();
+
 /// Vectorizes linalg ops executed in the same hal.interface.workgroup.
 std::unique_ptr<FunctionPass> createLinalgTileAndVectorizeWorkgroupsPass();
 

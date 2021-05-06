@@ -68,7 +68,6 @@ static llvm::cl::opt<int> genericOpsWorkgroupTileSize(
         "linalg.generic and linalg.indexed_generic workgroup tile size"),
     llvm::cl::init(128));
 
-namespace {
 template <TilingLevel tilingLevel>
 llvm::SmallVector<int64_t, 4> getTileSizes(Operation *op) {
   if (auto contractionOp = dyn_cast<linalg::ContractionOpInterface>(op)) {
@@ -185,7 +184,6 @@ llvm::SmallVector<int64_t, 4> getTileSizes(Operation *op) {
 
   return {1, 1, 1};
 }
-}  // namespace
 
 #define DEFINE_TILE_SIZE_FN(tilingLevel)                                      \
   template <>                                                                 \

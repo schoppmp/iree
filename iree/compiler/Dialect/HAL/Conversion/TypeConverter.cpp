@@ -36,14 +36,13 @@ HALTypeConverter::HALTypeConverter(
     return success();
   });
 
-  // Tensors become buffers by default.
-  // TODO(benvanik): make them buffer views instead? then they carry shape but
-  // are memory type erased which is not good.
+  // Tensors become buffers views by default.
+  // They may be stripped to buffers by canonicalization if they are not
+  // required to remain as buffer views.
   addConversion([](TensorType type) -> Optional<Type> {
     // HAL only should be concerned with numeric values.
     if (HALTypeConverter::shouldConvertToBuffer(type)) {
-      // TODO(benvanik): composite-type conversion (buffer + dynamic dims).
-      return IREE::HAL::BufferType::get(type.getContext());
+      return IREE::HAL::BufferViewType::get(type.getContext());
     }
     return llvm::None;
   });

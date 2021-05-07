@@ -76,16 +76,52 @@ class DynamicShapeConstantOpConversion
   }
 };
 
+template <typename T>
+class ConvertResultTypesConversion : public OpConversionPattern<T> {
+ public:
+  using OpConversionPattern<T>::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      T op, llvm::ArrayRef<Value> newOperands,
+      ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> newTypes;
+    bool anyChanged = false;
+    for (auto oldType : op.getOperation()->getResultTypes()) {
+      auto newType = getTypeConverter()->convertType(oldType);
+      if (oldType != newType) anyChanged = true;
+      newTypes.push_back(newType);
+    }
+    if (!anyChanged) return failure();
+    rewriter.replaceOpWithNewOp<T>(op, newTypes, newOperands, op->getAttrs());
+    return success();
+  }
+};
+
 }  // namespace
 
-// Appends all patterns for lowering IREE ops to HAL buffer ops.
-void populateIREEToHALPatterns(MLIRContext *context,
+void populateIREEToHALPatterns(MLIRContext *context, ConversionTarget &target,
+                               TypeConverter &typeConverter,
                                OwningRewritePatternList &patterns) {
-  patterns.insert<DynamicShapeConstantOpConversion>(context);
-}
-
-void setupIREEToHALLegality(MLIRContext *context, ConversionTarget &target) {
   target.addIllegalOp<IREE::DynamicShapeConstantOp>();
+  patterns.insert<DynamicShapeConstantOpConversion>(context);
+
+  typeConverter.addConversion([&](IREE::ListType type) {
+    auto elementType = typeConverter.convertType(type.getElementType());
+    return IREE::ListType::get(elementType);
+  });
+
+  target.addDynamicallyLegalOp<IREE::ListCreateOp>([&](IREE::ListCreateOp op) {
+    return typeConverter.isLegal(op.getType());
+  });
+  target.addDynamicallyLegalOp<IREE::ListGetOp>(
+      [&](IREE::ListGetOp op) { return typeConverter.isLegal(op.getType()); });
+  target.addDynamicallyLegalOp<IREE::ListSetOp>([&](IREE::ListSetOp op) {
+    return typeConverter.isLegal(op.value().getType());
+  });
+  patterns.insert<ConvertResultTypesConversion<IREE::ListCreateOp>,
+                  ConvertResultTypesConversion<IREE::ListGetOp>,
+                  ConvertResultTypesConversion<IREE::ListSetOp>>(typeConverter,
+                                                                 context);
 }
 
 }  // namespace iree_compiler
